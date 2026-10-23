@@ -1,0 +1,765 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Score any house floor plan against Vastu Shastra placement rules for every facing and garage side.">
+<title>Vastu Floor Plan Scorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: blueprint drafting table. House picker and plan editor on top, controls rail, floor plates, scorecard + ranking below. */
+:root{
+  --paper:#F3F5F8; --sheet:#FFFFFF; --ink:#16202E; --ink-2:#4A5568; --line:#C9D2DE; --grid:#E4E9F0;
+  --saffron:#C96A12; --saffron-bg:#FBEBDC;
+  --f-display:"Sora", "Segoe UI", system-ui, sans-serif;
+  --f-body:"Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --f-mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+  --heat-l:42%; --heat-a:.30; --heat-text:#16202E; --danger:#B42318;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#0F151E; --sheet:#151D29; --ink:#E6ECF4; --ink-2:#9BA9BC; --line:#2E3B4E; --grid:#1C2635;
+  --saffron:#F0A050; --saffron-bg:#3A2614; --heat-l:52%; --heat-a:.38; --heat-text:#E6ECF4; --danger:#F97066; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#0F151E; --sheet:#151D29; --ink:#E6ECF4; --ink-2:#9BA9BC; --line:#2E3B4E; --grid:#1C2635;
+  --saffron:#F0A050; --saffron-bg:#3A2614; --heat-l:52%; --heat-a:.38; --heat-text:#E6ECF4; --danger:#F97066; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.5;
+  padding-block:24px 48px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:20px}
+h1{font-family:var(--f-display);font-weight:600;font-size:clamp(24px,3.2vw,32px);margin:0;letter-spacing:-.01em;text-wrap:balance}
+h2{font-family:var(--f-display);font-weight:500;font-size:17px;margin:0 0 10px}
+.sub{color:var(--ink-2);margin:4px 0 0;max-width:72ch}
+.eyebrow{font-family:var(--f-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--saffron)}
+.panel{background:var(--sheet);border:1px solid var(--line);border-radius:10px;padding:16px}
+.controls{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px 22px;align-items:start}
+.ctl label,.ctl .lbl{display:block;font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);margin-bottom:6px}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{font:500 13px var(--f-mono);padding:7px 10px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;min-width:42px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
+.seg button:focus-visible,.rank button:focus-visible,svg .room:focus-visible{outline:2px solid var(--saffron);outline-offset:2px}
+input[type=range]{width:100%;accent-color:var(--saffron)}
+.hint{font-size:12.5px;color:var(--ink-2);margin-top:4px}
+.big{display:flex;align-items:baseline;gap:8px}
+.big b{font-family:var(--f-display);font-size:40px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+.big span{color:var(--ink-2);font-size:13px}
+.grade{display:inline-block;font:500 12px var(--f-mono);padding:3px 8px;border-radius:99px;margin-top:6px}
+.plates{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:20px}
+.plate{min-width:0}
+.plate svg{width:100%;height:auto;display:block}
+.plate h2{display:flex;justify-content:space-between;align-items:baseline}
+.plate h2 small{font:400 12px var(--f-mono);color:var(--ink-2)}
+svg text{font-family:var(--f-body);fill:var(--ink)}
+svg .mono{font-family:var(--f-mono)}
+svg .room{cursor:pointer}
+svg .room:hover rect{stroke-width:2}
+svg .room.sel rect{stroke:var(--saffron);stroke-width:2.5}
+.legend{display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:12.5px;color:var(--ink-2)}
+.sw{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:4px;border:1px solid var(--line)}
+.lower{display:grid;grid-template-columns:1.25fr 1fr;gap:20px}
+.cards{display:grid;gap:8px}
+.comp{display:grid;grid-template-columns:150px 1fr 54px;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--grid)}
+.comp:first-child{border-top:0}
+.comp .nm{font-weight:600}
+.comp .nm small{display:block;font-weight:400;color:var(--ink-2);font-size:12px}
+.comp .why{font-size:13px;color:var(--ink-2);min-width:0}
+.comp .sc{font:500 13px var(--f-mono);text-align:center;padding:4px 0;border-radius:6px}
+.detail{border-left:3px solid var(--saffron);border-radius:0;padding:10px 14px;background:var(--saffron-bg);font-size:14px}
+.detail b{font-family:var(--f-display);font-weight:500}
+.rank{display:grid;gap:4px}
+.rank button{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(60px,1fr) 34px;gap:8px;align-items:center;background:transparent;border:1px solid transparent;border-radius:6px;padding:4px 6px;color:var(--ink);cursor:pointer;text-align:left;font:13px var(--f-mono)}
+.rank button:hover{border-color:var(--line)}
+.rank button.cur{border-color:var(--saffron);background:var(--saffron-bg)}
+.bar{height:10px;border-radius:3px;background:var(--grid);overflow:hidden}
+.bar i{display:block;height:100%}
+.notes{font-size:13px;color:var(--ink-2);display:grid;gap:6px}
+.notes a{color:var(--saffron)}
+details summary{cursor:pointer;font-family:var(--f-display);font-weight:500}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{border-bottom:1px solid var(--grid);padding:5px 6px;text-align:center;font-variant-numeric:tabular-nums}
+th:first-child,td:first-child{text-align:left}
+.tblwrap{overflow-x:auto}
+@media (max-width:900px){.controls{grid-template-columns:1fr 1fr}.lower{grid-template-columns:1fr}}
+@media (max-width:640px){.plates{grid-template-columns:1fr}.controls{grid-template-columns:1fr}.comp{grid-template-columns:110px 1fr 46px}}
+@media (prefers-reduced-motion:no-preference){svg .heat{transition:fill .35s ease}.bar i{transition:width .35s ease}}
+.bar-model{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:end}
+.bar-model .ctl{min-width:0}
+select,input[type=text],input[type=number],textarea{font:14px var(--f-body);color:var(--ink);background:var(--sheet);border:1px solid var(--line);border-radius:6px;padding:7px 9px;max-width:100%}
+select:focus-visible,input:focus-visible,textarea:focus-visible,.btn:focus-visible{outline:2px solid var(--saffron);outline-offset:1px}
+.btn{font:500 13px var(--f-mono);padding:8px 12px;border-radius:6px;border:1px solid var(--line);background:transparent;color:var(--ink);cursor:pointer}
+.btn.primary{background:var(--saffron);border-color:var(--saffron);color:var(--sheet)}
+.btn.warn{color:var(--danger);border-color:var(--danger)}
+.seg button:disabled{opacity:.4;cursor:not-allowed}
+.editor{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,1fr);gap:18px}
+.stage{position:relative;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:#fff}
+.stage img{display:block;width:100%;height:auto;user-select:none;-webkit-user-drag:none;pointer-events:none}
+.stage svg{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:crosshair}
+.drop{border:2px dashed var(--line);border-radius:10px;padding:36px 16px;text-align:center;color:var(--ink-2);display:grid;gap:10px;justify-items:center}
+.drop.over{border-color:var(--saffron);background:var(--saffron-bg)}
+.side{display:grid;gap:14px;align-content:start;min-width:0}
+.roomrow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 34px;gap:6px;align-items:center}
+.roomrow input,.roomrow select{width:100%;padding:5px 7px;font-size:13px}
+.roomrow button{border:1px solid var(--line);background:transparent;color:var(--ink);border-radius:6px;height:30px;cursor:pointer;font-size:16px}
+#roomList{display:grid;gap:6px;max-height:340px;overflow:auto}
+.steps{display:flex;flex-wrap:wrap;gap:6px}
+.ehint{background:var(--saffron-bg);border-left:3px solid var(--saffron);border-radius:0;padding:8px 12px;font-size:13.5px}
+.emptyplate{border:2px dashed var(--line);border-radius:8px;padding:40px 16px;text-align:center;color:var(--ink-2);font-size:14px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.dims{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dims input{width:100%}
+textarea{width:100%;min-height:70px;font:12px var(--f-mono)}
+.srOnly{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media (max-width:900px){.editor{grid-template-columns:1fr}}
+</style>
+
+<style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow" id="mSub"></div>
+    <h1 id="mName">Vastu floor plan scorer</h1>
+    <p class="sub">Score any house plan against Vastu placement rules. Load the Windsor example or upload your own plan, then pick the direction the front door faces and the garage side. Every room is re-zoned against true north and scored red to green.</p>
+  </header>
+
+  <section class="panel bar-model" aria-label="Choose a house">
+    <div class="ctl"><label for="mSel">House</label><select id="mSel"></select></div>
+    <div class="ctl" id="mRename"><label for="mRenameInput">Name</label><input type="text" id="mRenameInput"></div>
+    <button class="btn primary" id="mNew">Upload a new plan</button>
+    <button class="btn" id="mEdit">Edit plan</button>
+    <button class="btn" id="mDup">Duplicate</button>
+    <button class="btn warn" id="mDel">Delete</button>
+    <p class="hint" id="saveMsg" hidden></p>
+  </section>
+
+  <section class="panel" id="editor" hidden aria-label="Plan editor">
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <div class="seg" id="fTabs" role="group" aria-label="Floors"></div>
+      <div class="row"><label for="fName" class="srOnly">Floor name</label><input type="text" id="fName" style="width:160px"><button class="btn warn" id="fRemove">Remove floor</button></div>
+    </div>
+    <div class="editor">
+      <div style="min-width:0;display:grid;gap:10px">
+        <div class="ehint" id="eHint"></div>
+        <div class="drop" id="drop">
+          <b style="font-family:var(--f-display);font-weight:500;color:var(--ink)">Drop a floor plan here</b>
+          <span>Image (PNG, JPG) or PDF. Builder brochures work; pick the page with the plans.</span>
+          <label class="btn primary" for="upl" style="cursor:pointer">Choose file</label>
+          <input type="file" id="upl" accept="image/*,application/pdf,.pdf" class="srOnly">
+          <button class="btn" id="useLast">Use the page I uploaded for another floor</button>
+          <span id="upMsg" class="hint"></span>
+        </div>
+        <div id="stageWrap" hidden style="display:grid;gap:8px">
+          <div class="row" id="pdfPages"></div>
+          <div class="stage" id="stage"><img id="stageImg" alt="Uploaded floor plan"><svg id="stageSvg" aria-label="Drawing surface"></svg></div>
+          <div class="row"><span id="rotBox" class="row"><button class="btn" id="rotL">Rotate left</button><button class="btn" id="rotR">Rotate right</button></span><button class="btn" id="replace">Replace image</button></div>
+        </div>
+      </div>
+      <div class="side">
+        <div><span class="lbl" style="display:block;font:11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);margin-bottom:6px">Steps</span><div class="seg steps" id="mModes"></div></div>
+        <div id="roomTools" style="display:grid;gap:8px">
+          <div><label for="eType" class="lbl" style="display:block;font:11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);margin-bottom:6px">Next room type</label><select id="eType" style="width:100%"></select></div>
+          <div><label for="eName" class="lbl" style="display:block;font:11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);margin-bottom:6px">Name (optional)</label><input type="text" id="eName" placeholder="e.g. Bedroom 2" style="width:100%"></div>
+        </div>
+        <div>
+          <div class="row" style="justify-content:space-between"><b style="font-family:var(--f-display);font-weight:500">Rooms on this floor</b><span class="hint" id="roomCount" style="margin:0"></span></div>
+          <div id="roomList" style="margin-top:8px"></div>
+          <button class="btn" id="clearRooms" style="margin-top:8px">Clear rooms on this floor</button>
+        </div>
+        <div>
+          <b style="font-family:var(--f-display);font-weight:500">House size (feet)</b>
+          <div class="dims" style="margin-top:6px"><label class="hint" style="margin:0">Width<input type="number" id="dimW" min="10" max="200"></label><label class="hint" style="margin:0">Depth<input type="number" id="dimD" min="10" max="200"></label></div>
+          <p class="hint">Only the proportions matter. Depth defaults to the ground-floor outline.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel controls" aria-label="House parameters">
+    <div class="ctl">
+      <span class="lbl" id="faceLbl">Front door faces</span>
+      <div class="seg" role="group" aria-labelledby="faceLbl" id="faceSeg"></div>
+      <div class="hint">The direction you face when you step out the front door.</div>
+    </div>
+    <div class="ctl">
+      <span class="lbl" id="garLbl">Garage side (from street)</span>
+      <div class="seg" role="group" aria-labelledby="garLbl">
+        <button id="garR" aria-pressed="true">As drawn</button>
+        <button id="garL" aria-pressed="false">Reversed</button>
+      </div>
+      <div class="hint">Reversed mirrors the whole house.</div>
+    </div>
+    <div class="ctl">
+      <label for="skew">Lot skew from true north</label>
+      <input type="range" id="skew" min="-30" max="30" step="5" value="0">
+      <div class="hint" id="skewOut"></div>
+    </div>
+    <div class="ctl" aria-live="polite">
+      <span class="lbl">Overall</span>
+      <div class="big"><b id="total">0</b><span>/ 100</span></div>
+      <span class="grade" id="grade">–</span>
+      <div class="hint" id="flags"></div>
+    </div>
+    <div id="optSegs" style="display:contents"></div>
+    <div class="ctl">
+      <span class="lbl">Find the maximum</span>
+      <div class="seg"><button id="bestAll">Load best</button><button id="bestFace">Best for this facing</button></div>
+      <label class="hint" style="display:flex;gap:6px;align-items:center;margin-top:8px"><input type="checkbox" id="showImg" checked> Show uploaded plan under the heat map</label>
+    </div>
+  </section>
+
+  <section class="plates" id="plates"></section>
+
+  <div class="legend">
+    <span><i class="sw" id="sw-2"></i>Strong fit (+2)</span>
+    <span><i class="sw" id="sw-1"></i>Acceptable (+1)</span>
+    <span><i class="sw" id="sw0"></i>Neutral (0)</span>
+    <span><i class="sw" id="sw-m1"></i>Caution (−1)</span>
+    <span><i class="sw" id="sw-m2"></i>Avoid (−2)</span>
+    <span><i class="sw" style="background:transparent"></i>Not scored (halls, closets)</span>
+    <span>Dashed square = Brahmasthan (centre). Saffron bar = front door.</span>
+  </div>
+
+  <div class="detail" id="detail"></div>
+
+  <section class="lower">
+    <div class="panel">
+      <h2>Scorecard for this orientation</h2>
+      <div class="cards" id="cards"></div>
+    </div>
+    <div class="panel">
+      <h2>Best layout for each facing</h2>
+      <p class="hint" style="margin:0 0 10px">Ranked first by red flags (kitchen or principal bedroom in a prohibited zone, northeast weighed down, weak entrance), then by score. Click any row to load it.</p>
+      <div class="rank" id="rankFace"></div>
+      <h2 style="margin-top:18px" id="rankTopH">Top combinations</h2>
+      <div class="rank" id="rank"></div>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Back up or share a plan">
+    <h2>Back up or move a plan</h2>
+    <p class="hint" style="margin:0 0 10px">Plans live in this browser only. Download a plan file (or copy it as text) to keep a backup or open it on another device, then import it here.</p>
+    <div class="row"><button class="btn" id="copyPlan">Copy plan as text</button><button class="btn" id="dlPlan">Download plan file</button><button class="btn" id="impBtn">Import pasted plan</button><label class="btn" for="impFile" style="cursor:pointer">Import from .json file</label><input type="file" id="impFile" accept=".json,application/json,text/plain" class="srOnly"></div>
+    <label for="impText" class="srOnly">Plan text</label><textarea id="impText" placeholder="Paste a copied plan here" style="margin-top:10px"></textarea>
+    <p class="hint" id="impMsg"></p>
+  </section>
+
+<section class="panel notes">
+    <details>
+      <summary>Room-by-room matrix for all facings</summary>
+      <div class="tblwrap" style="margin-top:10px"><table id="matrix"></table></div>
+    </details>
+    <details>
+      <summary>Rules, sources and limits</summary>
+      <div class="notes" style="margin-top:10px">
+        <p><b>Your plans.</b> Plans you upload and draw are kept only in this browser. Nothing is sent anywhere. Scoring depends on where you draw each room, so outline rooms carefully and keep the street at the bottom of the plan.</p>
+        <p><b>Windsor example accuracy.</b> Room positions are traced by hand from Lakeview's Windsor brochure (Elevation B, Oct 2025), including every optional layout it shows: library and main-floor bedroom on the ground floor; 4-bath and 5-bedroom on the second. The brochure marks Elevations C and E as similar; their room sizes differ by a few inches but positions match, so elevation does not change the score. Positions are within a few feet. The brochure supplied is the Glenway (Newmarket) version; confirm the Queensville Windsor matches. Whether the library and main-floor bedroom options can be combined is not stated, so they are modelled as alternatives.</p>
+        <p><b>Zoning method.</b> Each room is assigned to one of 8 directions by the bearing from the house centre to the room's centre. Rooms whose centre falls within the middle ninth of the footprint count as Brahmasthan. A consultant would use a 16-zone grid and split large rooms across zones.</p>
+        <p><b>Kitchen</b> southeast ideal, northwest acceptable, avoid northeast, north and southwest: <a href="https://jkcement.com/?p=16077" target="_blank" rel="noopener">JK Cement</a>, <a href="https://www.casagrand.co.in/blog/kitchen-placement-as-per-vastu-avoid-these-common-mistakes/" target="_blank" rel="noopener">Casagrand</a>, <a href="https://www.morphogenesis.org/?p=14349" target="_blank" rel="noopener">Morphogenesis</a>; avoid centre: <a href="https://astrologyvastu.yolasite.com/vastu.php" target="_blank" rel="noopener">AstrologyVastu</a>.</p>
+        <p><b>Master bedroom</b> southwest; south or west acceptable; avoid northeast and southeast: <a href="https://www.godrejproperties.com/blog/vastu-tips-home-directions-for-bedroom-kitchen-and-living-area" target="_blank" rel="noopener">Godrej</a>, <a href="https://www.homebazaar.com/knowledge/house-facing-direction-for-vastu" target="_blank" rel="noopener">HomeBazaar</a>, <a href="https://nuvonirmaan.com/blog/faqs-on-vastu-friendly-house/" target="_blank" rel="noopener">Nuvo Nirmaan</a>.</p>
+        <p><b>Bathrooms</b> avoid northeast and southwest: <a href="https://www.godrejproperties.com/blog/enhance-the-energy-flow-in-your-home-with-these-vastu-tips-for-effective-room-layouts" target="_blank" rel="noopener">Godrej</a>. West or northwest preferred is a common but less-sourced convention.</p>
+        <p><b>Stairs</b> south, west or southwest; not northeast: <a href="https://realtyhunting.com/vastu-for-corner-plot/" target="_blank" rel="noopener">RealtyHunting</a>, <a href="https://www.lntrealty.com/blogs/vastu-tips-for-new-home/" target="_blank" rel="noopener">L&amp;T Realty</a>.</p>
+        <p><b>Garage</b> northwest preferred: <a href="https://lntrealty.com/?p=23302" target="_blank" rel="noopener">L&amp;T Realty</a>; southeast or northwest parking: <a href="https://www.godigit.com/property-insurance/vastu/vastu-remedies-for-home" target="_blank" rel="noopener">Digit</a>. Southwest is disputed (scored 0).</p>
+        <p><b>Living room</b> north, east or northeast: <a href="https://www.ltfinance.com/blog/home-loan/vastu-shastra-for-home" target="_blank" rel="noopener">L&amp;T Finance</a>. <b>North and east open, south and west heavy</b>: <a href="https://www.udemy.com/course/vastu-shashtra/" target="_blank" rel="noopener">Udemy course</a>.</p>
+        <p><b>Library / study</b> east, west or northeast: <a href="https://www.godigit.com/property-insurance/vastu/vastu-remedies-for-home" target="_blank" rel="noopener">Digit</a>.</p>
+        <p><b>Entrance</b> east or north most auspicious: <a href="https://www.propertypistol.com/blog/best-house-facing-direction-as-per-vastu/" target="_blank" rel="noopener">PropertyPistol</a>; avoid southwest: <a href="https://togetherbuying.in/articles/house-facing-direction-vastu-shastra-guide" target="_blank" rel="noopener">TogetherBuying</a>. The door's position along the wall is scored by which half it sits in (the half nearer north/east is preferred). Pada numbering conventions differ between sources, so the exact pada shown is indicative only.</p>
+        <p><b>True north.</b> Around Toronto the compass reads roughly 10–13° west of true north. Use the lot skew slider for a street that isn't square to north, and check the site plan's north arrow.</p>
+        <p>This is a screening tool. Have a Vastu consultant review the chosen lot before signing.</p>
+      </div>
+    </details>
+  </section>
+</div>
+<script>
+const G_BASE=[
+ {id:'great',n:'Great room',sn:'Great rm',t:'living',x:0,y:0,w:17,h:14},
+ {id:'bkfst',n:'Breakfast',sn:'Breakfast',t:'dining',x:17,y:0,w:12,h:14},
+ {id:'kitchen',n:'Kitchen',sn:'Kitchen',t:'kitchen',x:29,y:0,w:11,h:16},
+ {id:'stairsG',n:'Main stairs',sn:'Stairs',t:'stairs',x:15,y:16,w:8,h:9},
+ {id:'mud',n:'Mud room',sn:'Mud',t:'none',x:24,y:16,w:16,h:8},
+ {id:'hallG',n:'Hall',sn:'Hall',t:'none',x:13,y:25,w:9,h:10},
+ {id:'garage',n:'Garage',sn:'Garage',t:'garage',x:22,y:24,w:18,h:21}
+];
+const GOPT={
+ std:{n:'Standard',door:11,rooms:[...G_BASE,
+  {id:'living',n:'Living / dining',sn:'Living/dining',t:'dining',x:0,y:14,w:13,h:21},
+  {id:'pwd',n:'Powder room',sn:'PWD',t:'bath',x:0,y:35,w:6,h:6},
+  {id:'coat',n:'Coat closet',sn:'',t:'none',x:0,y:41,w:6,h:4},
+  {id:'foyer',n:'Foyer',sn:'Foyer',t:'none',x:6,y:35,w:16,h:10},
+  {id:'porch',n:'Covered porch',sn:'Porch',t:'porch',x:6,y:45,w:11,h:5}]},
+ lib:{n:'Library',door:11,rooms:[...G_BASE,
+  {id:'living',n:'Living / dining',sn:'Living/dining',t:'dining',x:0,y:14,w:13,h:12},
+  {id:'library',n:'Library',sn:'Library',t:'study',x:0,y:26,w:13,h:9},
+  {id:'pwd',n:'Powder room',sn:'PWD',t:'bath',x:0,y:35,w:6,h:6},
+  {id:'coat',n:'Coat closet',sn:'',t:'none',x:0,y:41,w:6,h:4},
+  {id:'foyer',n:'Foyer',sn:'Foyer',t:'none',x:6,y:35,w:16,h:10},
+  {id:'porch',n:'Covered porch',sn:'Porch',t:'porch',x:6,y:45,w:11,h:5}]},
+ bed:{n:'Main-floor bedroom',door:16,rooms:[...G_BASE,
+  {id:'living',n:'Living / dining',sn:'Living/dining',t:'dining',x:0,y:14,w:13,h:14},
+  {id:'mainbath',n:'Main bath (with shower)',sn:'Bath',t:'bath',x:0,y:28,w:8,h:7},
+  {id:'clG',n:'Closet',sn:'',t:'none',x:8,y:28,w:5,h:7},
+  {id:'bedG',n:'Main-floor bedroom',sn:'Bedroom',t:'bed',x:0,y:35,w:11,h:10},
+  {id:'foyer',n:'Foyer',sn:'Foyer',t:'none',x:11,y:35,w:11,h:10},
+  {id:'porch',n:'Covered porch',sn:'Porch',t:'porch',x:11,y:45,w:11,h:5}]}
+};
+const S_B4=[
+  {id:'ens',n:'Principal ensuite',sn:'Ensuite',t:'bath',x:0,y:0,w:13,h:12},
+  {id:'wic1',n:'Walk-in closet',sn:'WIC',t:'none',x:13,y:0,w:5,h:12},
+  {id:'master',n:'Principal bedroom',sn:'Principal bed',t:'master',x:18,y:0,w:22,h:15},
+  {id:'bed4',n:'Bedroom 4',sn:'Bed 4',t:'bed',x:0,y:12,w:13,h:13},
+  {id:'hall2',n:'Upper hall',sn:'',t:'none',x:13,y:12,w:11,h:4},
+  {id:'stairsS',n:'Stairs (upper)',sn:'Stairs',t:'stairs',x:15,y:16,w:8,h:9},
+  {id:'laundry',n:'Laundry',sn:'Laundry',t:'none',x:24,y:15,w:7,h:8},
+  {id:'ens2',n:'Ensuite 2',sn:'Ens 2',t:'bath',x:31,y:15,w:9,h:10},
+  {id:'hall3',n:'Hall',sn:'Hall',t:'none',x:13,y:25,w:9,h:10},
+  {id:'cl2',n:'Walk-in closet',sn:'WIC',t:'none',x:22,y:25,w:18,h:4},
+  {id:'bed3',n:'Bedroom 3',sn:'Bed 3',t:'bed',x:0,y:35,w:14,h:11},
+  {id:'hall4',n:'Linen / hall',sn:'',t:'none',x:14,y:35,w:8,h:7},
+  {id:'bed2',n:'Bedroom 2',sn:'Bed 2',t:'bed',x:22,y:29,w:18,h:13}];
+const SOPT={
+ b4:{n:'4 bed · 3 bath',rooms:[...S_B4,
+  {id:'shared',n:'Shared bath',sn:'Bath',t:'bath',x:0,y:25,w:6,h:10},
+  {id:'cl3',n:'Closets',sn:'',t:'none',x:6,y:25,w:7,h:10}]},
+ b4x4:{n:'4 bed · 4 bath',rooms:[...S_B4,
+  {id:'ens3',n:'Ensuite 3',sn:'Ens 3',t:'bath',x:0,y:25,w:6,h:10},
+  {id:'ens4',n:'Ensuite 4',sn:'Ens 4',t:'bath',x:6,y:25,w:7,h:6},
+  {id:'cl3',n:'Closet',sn:'',t:'none',x:6,y:31,w:7,h:4}]},
+ b5:{n:'5 bed',rooms:[
+  {id:'master',n:'Principal bedroom',sn:'Principal',t:'master',x:0,y:0,w:13,h:18},
+  {id:'ens',n:'Principal ensuite',sn:'Ensuite',t:'bath',x:13,y:0,w:11,h:10},
+  {id:'wic2',n:'Walk-in closet',sn:'WIC',t:'none',x:24,y:0,w:6,h:10},
+  {id:'bed2',n:'Bedroom 2',sn:'Bed 2',t:'bed',x:30,y:0,w:10,h:14},
+  {id:'hall2',n:'Upper hall',sn:'',t:'none',x:13,y:10,w:17,h:6},
+  {id:'wicM',n:'Principal closets',sn:'WIC',t:'none',x:0,y:18,w:13,h:8},
+  {id:'stairsS',n:'Stairs (upper)',sn:'Stairs',t:'stairs',x:15,y:16,w:8,h:9},
+  {id:'laundry',n:'Laundry',sn:'Laundry',t:'none',x:23,y:16,w:7,h:8},
+  {id:'ens2',n:'Ensuite 2',sn:'Ens 2',t:'bath',x:30,y:14,w:10,h:6},
+  {id:'bed3',n:'Bedroom 3',sn:'Bed 3',t:'bed',x:30,y:20,w:10,h:11},
+  {id:'shared',n:'Shared bath',sn:'Bath',t:'bath',x:0,y:26,w:8,h:9},
+  {id:'cl5',n:'Closet',sn:'',t:'none',x:8,y:26,w:5,h:9},
+  {id:'hall3',n:'Hall / linen',sn:'Hall',t:'none',x:13,y:25,w:17,h:8},
+  {id:'bed5',n:'Bedroom 5',sn:'Bed 5',t:'bed',x:0,y:35,w:13,h:10},
+  {id:'ens3',n:'Ensuite 3',sn:'Ens 3',t:'bath',x:13,y:36,w:9,h:10},
+  {id:'wic4',n:'Walk-in closet',sn:'WIC',t:'none',x:22,y:33,w:5,h:10},
+  {id:'bed4',n:'Bedroom 4',sn:'Bed 4',t:'bed',x:27,y:33,w:13,h:10}]}
+};
+const DIRS=['N','NE','E','SE','S','SW','W','NW'];
+const DIRNAME={N:'North',NE:'Northeast',E:'East',SE:'Southeast',S:'South',SW:'Southwest',W:'West',NW:'Northwest',C:'Centre (Brahmasthan)'};
+const TYPES=[['kitchen','Kitchen'],['master','Principal bedroom'],['bed','Other bedroom'],['bath','Bathroom / powder'],['stairs','Stairs'],['garage','Garage'],['living','Great / family room'],['dining','Living / dining'],['study','Library / office'],['none','Hall, closet, laundry'],['porch','Porch']];
+const TYPENAME=Object.fromEntries(TYPES);
+const R={
+ kitchen:{SE:[2,'Southeast is the fire (Agni) zone, the most-cited kitchen location.'],NW:[1,'Northwest is the commonly accepted second choice.'],E:[0,'East is not a named kitchen zone; neutral.'],S:[0,'South is not prohibited; neutral.'],W:[0,'West is listed as less ideal than southeast.'],N:[-2,'Sources say not to place the kitchen in the north.'],NE:[-2,'Northeast kitchen is the most consistently prohibited placement.'],SW:[-2,'Southwest kitchen is widely prohibited.'],C:[-2,'Kitchen in the centre is listed as a no-no.']},
+ master:{SW:[2,'Southwest is the stability zone for the principal bedroom.'],S:[1,'South is the stated fallback for the master.'],W:[1,'West is the stated fallback for the master.'],NW:[0,'Northwest suits guests more than the master.'],N:[-1,'North is not recommended for the master.'],E:[-1,'East is not recommended for the master.'],SE:[-2,'Southeast master bedroom is listed as a mistake.'],NE:[-2,'Avoid bedrooms in the northeast.'],C:[-2,'Centre should be kept open.']},
+ bed:{W:[1,'West works for children or guest bedrooms.'],S:[1,'South works for secondary bedrooms.'],NW:[1,'Northwest suits guest and children\'s rooms.'],E:[1,'East is acceptable for children\'s rooms.'],N:[1,'North is acceptable for secondary bedrooms.'],SW:[0,'Southwest is reserved for the head of household.'],SE:[-1,'Southeast bedrooms are generally discouraged.'],NE:[-1,'Avoid bedrooms in the northeast.'],C:[-2,'Centre should be kept open.']},
+ bath:{W:[2,'West is a preferred toilet zone.'],NW:[2,'Northwest is a preferred toilet zone.'],S:[1,'South is acceptable.'],SE:[0,'Southeast is neutral for baths.'],E:[0,'East is neutral for baths.'],N:[0,'North is neutral for baths.'],NE:[-2,'Avoid bathrooms in the northeast.'],SW:[-2,'Avoid bathrooms in the southwest.'],C:[-2,'A toilet in the Brahmasthan is a major defect.']},
+ stairs:{SW:[2,'Southwest suits heavy elements like stairs.'],S:[2,'South suits stairs.'],W:[2,'West suits stairs.'],SE:[1,'Southeast is acceptable.'],NW:[1,'Northwest is acceptable.'],N:[-1,'North should stay light.'],E:[-1,'East should stay light.'],NE:[-2,'Do not place the staircase in the northeast.'],C:[-2,'Stairs in the Brahmasthan; the centre should stay open.']},
+ garage:{NW:[2,'Northwest is the preferred garage zone.'],SE:[1,'Southeast parking is acceptable.'],W:[1,'West is a heavier zone; acceptable.'],SW:[0,'Disputed: some sources accept a southwest garage, others want that corner lived in.'],S:[0,'South is a heavier zone; neutral.'],E:[-1,'East should stay open and light.'],N:[-1,'North should stay open and light.'],NE:[-2,'A garage in the northeast blocks the most important zone.'],C:[-2,'Centre should be open.']},
+ living:{NE:[2,'Northeast living rooms are preferred.'],N:[2,'North is preferred for the living area.'],E:[2,'East is preferred for the living area.'],NW:[1,'Northwest is acceptable for social spaces.'],W:[0,'West is neutral.'],S:[0,'South is neutral.'],SE:[-1,'Southeast is the fire zone.'],SW:[-1,'Southwest should be a private, heavy room.'],C:[1,'An open great room in the centre keeps the Brahmasthan open.']},
+ dining:{W:[2,'West suits dining.'],E:[1,'East is acceptable for dining.'],S:[1,'South is acceptable for dining.'],N:[1,'North is acceptable for dining.'],NW:[1,'Northwest is acceptable.'],SE:[1,'Near the kitchen zone; fine.'],NE:[1,'Open use; fine.'],SW:[0,'Neutral.'],C:[1,'Open use keeps the centre light.']},
+ study:{E:[2,'East suits a study.'],NE:[2,'Northeast suits a study.'],W:[1,'West is listed for a study.'],N:[1,'North is acceptable for study.'],NW:[0,'Neutral.'],S:[0,'Neutral.'],SW:[0,'Neutral.'],SE:[-1,'Southeast is the fire zone.'],C:[-1,'Centre should stay open.']}
+};
+const NEOPEN={garage:-2,kitchen:-2,bath:-2,stairs:-2,master:-1,bed:-1,living:2,dining:1,study:2,none:1,porch:2};
+const CENTRE={stairs:-2,bath:-2,kitchen:-2,garage:-2,master:-1,bed:-1,none:1,living:1,dining:1,study:-1,porch:0};
+const FACE={N:2,NE:2,E:2,NW:0,W:0,SE:-1,S:-1,SW:-2};
+const WTS=[['entrance','Entrance',20],['kitchen','Kitchen',15],['master','Principal bedroom',15],['ne','Northeast corner',10],['centre','Centre (Brahmasthan)',10],['baths','Bathrooms',10],['stairs','Stairs',8],['garage','Garage',7],['living','Great room',5],['beds','Other bedrooms',5],['study','Library / office',3]];
+const NEEDS={entrance:'Mark the front door',kitchen:'Draw the kitchen',master:'Draw the principal bedroom',baths:'Draw the bathrooms',stairs:'Draw the stairs',garage:'Draw the garage',living:'Draw the great or family room'};
+
+const WINDSOR={id:'windsor',builtin:true,name:'The Windsor',sub:'Lakeview Homes · 45′ detached · 2,950 sq ft · built-in example',W:40,D:45,
+  floors:[{name:'Ground floor',variants:GOPT},{name:'Second floor',variants:SOPT}]};
+
+/* ---------- storage ---------- */
+const KEY='vastu.models.v1';
+let MODELS=[];
+function loadModels(){try{const s=localStorage.getItem(KEY);MODELS=s?JSON.parse(s):[]}catch(e){MODELS=[]}}
+function saveModels(){try{localStorage.setItem(KEY,JSON.stringify(MODELS));setSaveMsg('')}catch(e){setSaveMsg('This browser would not save the plan (storage is full or blocked). Use "Copy plan as text" below to keep a copy.')}}
+function setSaveMsg(t){const el=document.getElementById('saveMsg');if(el){el.textContent=t;el.hidden=!t}}
+
+/* ---------- geometry ---------- */
+function rad(d){return d*Math.PI/180}
+function nb(b){return ((b%360)+360)%360}
+function bearing(dx,df,F){const r=rad(F);const n=df*Math.cos(r)+dx*Math.sin(r);const e=df*Math.sin(r)-dx*Math.cos(r);return nb(Math.atan2(e,n)*180/Math.PI)}
+function dirOf(b){return DIRS[Math.round(nb(b)/45)%8]}
+
+/* ---------- engine model ---------- */
+function toEngine(m){
+  if(m.builtin) return m;
+  const g=m.floors[0]&&m.floors[0].fp;
+  const W=+m.W||40, D=+m.D||(g?Math.round(W*g.h/g.w*10)/10:45);
+  const floors=m.floors.map(f=>{
+    const fp=f.fp; if(!fp) return {name:f.name,img:null,variants:{base:{n:'As drawn',door:null,rooms:[]}}};
+    const sx=W/fp.w, sy=D/fp.h;
+    return {name:f.name,img:f.img?{src:f.img,iw:f.iw,ih:f.ih,fp}:null,variants:{base:{n:'As drawn',
+      door:f.door!=null?(f.door-fp.x)*sx:null,
+      rooms:f.rooms.map(r=>({id:r.id,n:r.n,sn:r.n,t:r.t,x:(r.x-fp.x)*sx,y:(r.y-fp.y)*sy,w:r.w*sx,h:r.h*sy}))}}};
+  });
+  return {id:m.id,name:m.name,sub:'Your plan · '+m.floors.length+' floor'+(m.floors.length>1?'s':''),W,D,floors};
+}
+function variantKeys(em){return em.floors.map(f=>Object.keys(f.variants))}
+function combosOf(em){let out=[[]];variantKeys(em).forEach(ks=>{const n=[];out.forEach(o=>ks.forEach(k=>n.push([...o,k])));out=n});return out}
+
+function zoneFn(em,flip,F){const W=em.W,D=em.D,CX=W/2,CY=D/2;
+  return r=>{const x=flip?W-r.x-r.w:r.x;const dx=x+r.w/2-CX, df=r.y+r.h/2-CY;
+    if(Math.abs(dx)<=W/6&&Math.abs(df)<=D/6) return 'C';return dirOf(bearing(dx,df,F))}}
+
+function entrance(em,F,flip,doorX){
+  const W=em.W,D=em.D,CX=W/2,CY=D/2;
+  const fd=dirOf(F);
+  const door=flip?W-doorX:doorX;
+  const corners=[0,W].map(x=>{const b=bearing(x-CX,D-CY,F);return {x,b,ne:Math.cos(rad(b-45))}});
+  const good=corners[0].ne>=corners[1].ne?corners[0]:corners[1];
+  const t=Math.abs(door-good.x)/W; const pada=Math.min(9,Math.floor(t*9)+1);
+  let ds,dtxt;const cn=DIRNAME[dirOf(good.b)].toLowerCase();
+  if(Math.abs(corners[0].ne-corners[1].ne)<0.05){ds=1;dtxt='Both ends of this wall are equally favourable.'}
+  else if(t<1/9){ds=1;dtxt='Door sits in the end segment nearest the '+cn+' corner.'}
+  else if(t<0.5){ds=2;dtxt='Door is in the half of the wall nearer the '+cn+' corner, the favoured half.'}
+  else if(t<8/9){ds=0;dtxt='Door is in the less favoured half of the wall.'}
+  else{ds=-2;dtxt='Door is in the end segment of the less favoured half.'}
+  const fs=FACE[fd];
+  return {score:(fs+ds)/2,txt:DIRNAME[fd]+'-facing entrance ('+(fs>0?'+':'')+fs+'). '+dtxt+' Roughly pada '+pada+' of 9 from that corner.'};
+}
+
+function evaluate(em,sel,F,flip){
+  const zf=zoneFn(em,flip,F);
+  const fl=em.floors.map((f,i)=>f.variants[sel[i]]||Object.values(f.variants)[0]);
+  const all=[];const Z={};
+  fl.forEach((v,i)=>v.rooms.forEach(r=>{all.push({r,i});Z[i+':'+r.id]=zf(r)}));
+  const zz=o=>Z[o.i+':'+o.r.id];
+  const rule=o=>R[o.r.t]?R[o.r.t][zz(o)]:null;
+  const c={},why={};
+  const doorX=fl[0]?fl[0].door:null;
+  if(doorX!=null){const e=entrance(em,F,flip,doorX);c.entrance=e.score;why.entrance=e.txt}
+  const one=(key,t)=>{const o=all.find(a=>a.r.t===t);if(!o)return;const ru=rule(o);c[key]=ru[0];why[key]=o.r.n+' in '+DIRNAME[zz(o)]+'. '+ru[1]};
+  one('kitchen','kitchen');one('master','master');one('garage','garage');one('stairs','stairs');one('living','living');one('study','study');
+  const baths=all.filter(o=>o.r.t==='bath').map(o=>({n:o.r.n,z:zz(o),s:rule(o)[0]}));
+  if(baths.length){c.baths=baths.reduce((a,b)=>a+b.s,0)/baths.length;const bad=baths.filter(b=>b.s<0);
+    why.baths=baths.length+' bathroom'+(baths.length>1?'s':'')+'. '+(bad.length?'Problem: '+bad.map(b=>b.n.toLowerCase()+' in '+DIRNAME[b.z].toLowerCase()).join('; ')+'.':'None in the northeast, southwest or centre.')}
+  const beds=all.filter(o=>o.r.t==='bed').map(o=>({n:o.r.n,z:zz(o),s:rule(o)[0]}));
+  if(beds.length){c.beds=beds.reduce((a,b)=>a+b.s,0)/beds.length;why.beds=beds.map(b=>b.n+' '+b.z).join(' · ')}
+  if(all.length){
+    const ne=all.filter(o=>o.i===0&&zz(o)==='NE');
+    if(ne.length){const w=ne.reduce((a,o)=>NEOPEN[o.r.t]<a.s?{s:NEOPEN[o.r.t],o}:a,{s:9,o:null});c.ne=w.s;why.ne='Ground-floor northeast holds: '+ne.map(o=>o.r.n.toLowerCase()).join(', ')+'.'+(w.s<0?' The '+w.o.r.n.toLowerCase()+' weighs down a zone that should stay light.':' Light, open uses; good.')}
+    else{c.ne=1;why.ne='No room centre falls in the northeast; the zone is shared by adjacent rooms.'}
+    const cen=all.filter(o=>zz(o)==='C');
+    if(cen.length){const w=Math.min(...cen.map(o=>CENTRE[o.r.t]));c.centre=w;why.centre='Centre holds: '+[...new Set(cen.map(o=>o.r.n.toLowerCase()))].join(', ')+'.'+(w<0?' Heavy or wet uses in the Brahmasthan; the centre should stay open.':'')}
+    else{c.centre=2;why.centre='Centre is open.'}
+  }
+  let tot=0,wt=0;WTS.forEach(([k,,w])=>{if(c[k]===undefined)return;tot+=w*(c[k]+2)/4;wt+=w});
+  const flags=[];if(c.kitchen<=-2)flags.push('kitchen in a prohibited zone');if(c.master<=-2)flags.push('principal bedroom in a prohibited zone');if(c.ne<=-2)flags.push('northeast weighed down');if(c.entrance!==undefined&&c.entrance<=-1)flags.push('weak entrance');
+  const missing=Object.keys(NEEDS).filter(k=>c[k]===undefined);
+  return {c,why,Z,fl,total:wt?Math.round(tot/wt*100):0,flags,missing,empty:!all.length};
+}
+
+/* ---------- state ---------- */
+const st={model:'windsor',face:90,flip:false,skew:0,sel:null,vsel:{},editing:false,ef:0,emode:'fp',etype:'kitchen',ename:'',full:null,drag:null,delArm:null};
+function curModel(){return st.model==='windsor'?WINDSOR:MODELS.find(m=>m.id===st.model)||WINDSOR}
+function curSel(em){const ks=variantKeys(em);const s=st.vsel[em.id]||[];return ks.map((k,i)=>k.includes(s[i])?s[i]:k[0])}
+function setSel(em,sel){st.vsel[em.id]=sel}
+
+/* ---------- heat rendering ---------- */
+function hue(s){return Math.round((s+2)/4*130)}
+function heatFill(s){return 'hsl('+hue(s)+' 72% var(--heat-l) / var(--heat-a))'}
+function heatSolid(s){return 'hsl('+hue(s)+' 65% var(--heat-l))'}
+function sStr(s){const v=Math.round(s*10)/10;return (v>0?'+':v<0?'−':'')+Math.abs(v)}
+function gradeOf(t){return t>=70?2:t>=58?1:t>=48?0:t>=40?-1:-2}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+
+function plate(em,fi,v,ev,F,flip){
+  const W=em.W,D=em.D,CX=W/2,CY=D/2,M=34,S=320/W;
+  const maxY=Math.max(D,...v.rooms.map(r=>r.y+r.h));
+  const vw=W*S+2*M, vh=(maxY+1)*S+2*M+18;
+  const px=x=>M+x*S, py=y=>M+y*S, k='f'+fi;
+  let s='<svg viewBox="0 0 '+vw+' '+vh+'" role="img" aria-label="'+esc(em.floors[fi].name)+' heat map"><defs><clipPath id="clip'+k+'"><rect x="'+px(0)+'" y="'+py(0)+'" width="'+W*S+'" height="'+D*S+'"/></clipPath>'+
+   '<pattern id="hatch'+k+'" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="var(--grid)" stroke-width="2"/></pattern></defs>';
+  const img=em.floors[fi].img;
+  if(img&&st.showImg){const sx=W*S/img.fp.w, sy=D*S/img.fp.h;
+    const tx=flip?'translate('+(px(W)+img.fp.x*sx)+' '+(py(0)-img.fp.y*sy)+') scale(-1 1)':'translate('+(px(0)-img.fp.x*sx)+' '+(py(0)-img.fp.y*sy)+')';
+    s+='<image href="'+img.src+'" width="'+(img.iw*sx)+'" height="'+(img.ih*sy)+'" transform="'+tx+'" opacity=".5" preserveAspectRatio="none"/>';}
+  v.rooms.forEach(r=>{
+    const key=fi+':'+r.id, z=ev.Z[key], rule=R[r.t]?R[r.t][z]:null;
+    const x=px(flip?W-r.x-r.w:r.x), y=py(r.y), w=r.w*S, h=r.h*S;
+    const fill=rule?heatFill(rule[0]):(img&&st.showImg?'transparent':'url(#hatch'+k+')');
+    s+='<g class="room'+(st.sel===key?' sel':'')+'" tabindex="0" role="button" data-key="'+key+'" aria-label="'+esc(r.n)+', '+DIRNAME[z]+(rule?', score '+rule[0]:'')+'">';
+    s+='<rect class="heat" x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" fill="'+fill+'" stroke="var(--line)" stroke-width="1"/>';
+    if(r.sn&&w>=40&&h>=30){
+      const lbl=w>=100?r.n.replace(' (with shower)',''):r.sn;const cut=Math.max(4,Math.floor(w/7.2));const L=lbl.length>cut?lbl.slice(0,cut-1)+'…':lbl;
+      s+='<text x="'+(x+w/2)+'" y="'+(y+h/2-(h>=46?5:0))+'" text-anchor="middle" dominant-baseline="central" font-size="11.5" font-weight="600">'+esc(L)+'</text>';
+      if(h>=46) s+='<text class="mono" x="'+(x+w/2)+'" y="'+(y+h/2+11)+'" text-anchor="middle" dominant-baseline="central" font-size="11" fill="var(--ink-2)">'+z+(rule?' · '+sStr(rule[0]):'')+'</text>';
+    }
+    s+='</g>';
+  });
+  s+='<rect x="'+px(0)+'" y="'+py(0)+'" width="'+W*S+'" height="'+D*S+'" fill="none" stroke="var(--ink)" stroke-width="2.5"/>';
+  s+='<rect x="'+px(CX-W/6)+'" y="'+py(CY-D/6)+'" width="'+(W/3*S)+'" height="'+(D/3*S)+'" fill="none" stroke="var(--ink)" stroke-width="1.2" stroke-dasharray="5 4" opacity=".7"/>';
+  s+='<g clip-path="url(#clip'+k+')" opacity=".55">';
+  for(let i=0;i<8;i++){const b=22.5+45*i;const df=Math.cos(rad(b-F)), dx=Math.sin(rad(F-b));
+    s+='<line x1="'+px(CX)+'" y1="'+py(CY)+'" x2="'+px(CX+dx*W*2)+'" y2="'+py(CY+df*W*2)+'" stroke="var(--saffron)" stroke-width="1" stroke-dasharray="2 4"/>';}
+  s+='</g>';
+  DIRS.forEach((d,i)=>{const b=45*i;const df=Math.cos(rad(b-F)), dx=Math.sin(rad(F-b));
+    const tx=Math.abs(dx)>1e-6?((W/2*S+16)/Math.abs(dx)):1e9, ty=Math.abs(df)>1e-6?((D/2*S+16)/Math.abs(df)):1e9;const t=Math.min(tx,ty);
+    s+='<text class="mono" x="'+(px(CX)+dx*t)+'" y="'+(py(CY)+df*t)+'" text-anchor="middle" dominant-baseline="central" font-size="11.5" font-weight="500" fill="'+(d==='NE'?'var(--saffron)':'var(--ink-2)')+'">'+d+'</text>';});
+  if(fi===0&&v.door!=null){const dw=Math.max(2.5,W/10);const dx0=(flip?W-v.door:v.door)-dw/2;
+    s+='<rect x="'+px(dx0)+'" y="'+(py(D)-3)+'" width="'+dw*S+'" height="6" rx="2" fill="var(--saffron)"/>';}
+  s+='<text x="'+(vw/2)+'" y="'+(vh-12)+'" text-anchor="middle" font-size="12" fill="var(--ink-2)">Street ↓ · front faces '+DIRNAME[dirOf(F)]+' ('+Math.round(nb(F))+'°)</text>';
+  return s+'</svg>';
+}
+
+function allCombos(em){const out=[];const cs=combosOf(em);DIRS.forEach((d,i)=>[false,true].forEach(fl=>cs.forEach(sel=>{const e=evaluate(em,sel,i*45+st.skew,fl);out.push({d,f:i*45,fl,sel,t:e.total,nf:e.flags.length})})));return out.sort((a,b)=>a.nf-b.nf||b.t-a.t)}
+function selLabel(em,sel){return em.floors.map((f,i)=>Object.keys(f.variants).length>1?f.variants[sel[i]].n:null).filter(Boolean).join(' · ')}
+function rankRow(em,c,cur){const lab=c.d+' · garage '+(c.fl?'L':'R')+(selLabel(em,c.sel)?' · '+selLabel(em,c.sel):'');
+  return '<button class="'+(cur?'cur':'')+'" data-f="'+c.f+'" data-fl="'+c.fl+'" data-sel="'+c.sel.join(',')+'"><span style="min-width:0">'+esc(lab)+'<br><small style="color:var(--ink-2)">'+(c.nf?c.nf+' red flag'+(c.nf>1?'s':''):'No red flags')+'</small></span><span class="bar"><i style="width:'+c.t+'%;background:'+heatSolid(gradeOf(c.t))+'"></i></span><span style="text-align:right">'+c.t+'</span></button>'}
+
+function renderHeat(){
+  const m=curModel(), em=toEngine(m), sel=curSel(em), f=st.face+st.skew, ev=evaluate(em,sel,f,st.flip);
+  document.getElementById('mName').textContent=em.name;
+  document.getElementById('mSub').textContent=em.sub;
+  // option segs
+  const os=document.getElementById('optSegs');os.innerHTML='';
+  em.floors.forEach((fl,i)=>{const ks=Object.keys(fl.variants);if(ks.length<2)return;
+    const d=document.createElement('div');d.className='ctl';d.innerHTML='<span class="lbl">'+esc(fl.name)+' option</span><div class="seg"></div>';
+    ks.forEach(k=>{const b=document.createElement('button');b.textContent=fl.variants[k].n;b.setAttribute('aria-pressed',sel[i]===k);b.onclick=()=>{const s=[...sel];s[i]=k;setSel(em,s);st.sel=null;renderHeat()};d.querySelector('.seg').appendChild(b)});
+    os.appendChild(d)});
+  const nC=combosOf(em).length*16;
+  document.getElementById('bestAll').textContent='Load best of all '+nC;
+  document.getElementById('rankTopH').textContent='Top '+Math.min(12,nC)+' of all '+nC+' combinations';
+  // plates
+  const pl=document.getElementById('plates');
+  pl.innerHTML=em.floors.map((fl,i)=>'<div class="panel plate"><h2>'+esc(fl.name)+' <small>'+esc(Object.keys(fl.variants).length>1?fl.variants[sel[i]].n:'')+(i===0?' · garage '+(st.flip?'left':'right'):'')+'</small></h2>'+
+    (ev.fl[i].rooms.length?plate(em,i,ev.fl[i],ev,f,st.flip):'<div class="emptyplate">No rooms drawn on this floor yet. Open the plan editor to draw them.</div>')+'</div>').join('');
+  // summary
+  document.getElementById('total').textContent=ev.empty?'–':ev.total;
+  const g=document.getElementById('grade'),gs=gradeOf(ev.total);
+  if(ev.empty){g.textContent='Draw rooms to score';g.style.background='var(--grid)'}
+  else{g.textContent=['Weak fit','Needs remedies','Mixed','Good fit','Strong fit'][gs+2]+' · '+(ev.flags.length?ev.flags.length+' red flag'+(ev.flags.length>1?'s':''):'no red flags');g.style.background=heatFill(gs)}
+  g.style.color='var(--heat-text)';
+  document.getElementById('flags').textContent=ev.empty?'':(ev.flags.length?'Red flags: '+ev.flags.join('; ')+'.':'No red flags: kitchen, principal bedroom, northeast and entrance avoid prohibited placements.')+(ev.missing.length?' Not scored yet: '+ev.missing.map(k=>NEEDS[k].toLowerCase()).join(', ')+'.':'');
+  const b=nb(f);
+  document.getElementById('skewOut').textContent=(st.skew>0?'+':'')+st.skew+'° · front bearing '+b+'° ('+dirOf(b)+')';
+  document.getElementById('cards').innerHTML=WTS.filter(([k])=>ev.c[k]!==undefined).map(([k,n,w])=>'<div class="comp"><div class="nm">'+n+'<small>weight '+w+'</small></div><div class="why">'+esc(ev.why[k])+'</div><div class="sc" style="background:'+heatFill(ev.c[k])+'">'+sStr(ev.c[k])+'</div></div>').join('')||'<p class="hint">Nothing to score yet.</p>';
+  document.querySelectorAll('#faceSeg button').forEach(bn=>bn.setAttribute('aria-pressed',+bn.dataset.f===st.face));
+  document.getElementById('garR').setAttribute('aria-pressed',!st.flip);document.getElementById('garL').setAttribute('aria-pressed',st.flip);
+  // ranking
+  const combos=ev.empty?[]:allCombos(em);
+  const isCur=c=>c.f===st.face&&c.fl===st.flip&&c.sel.join()===sel.join();
+  document.getElementById('rank').innerHTML=combos.slice(0,12).map(c=>rankRow(em,c,isCur(c))).join('');
+  document.getElementById('rankFace').innerHTML=DIRS.map(d=>combos.find(c=>c.d===d)).filter(Boolean).map(c=>rankRow(em,c,isCur(c))).join('');
+  const load=c=>{st.face=c.f;st.flip=c.fl;setSel(em,c.sel);st.sel=null;renderHeat()};
+  document.querySelectorAll('.rank button').forEach(bn=>bn.onclick=()=>load({f:+bn.dataset.f,fl:bn.dataset.fl==='true',sel:bn.dataset.sel.split(',')}));
+  document.getElementById('bestAll').onclick=()=>combos[0]&&load(combos[0]);
+  document.getElementById('bestFace').onclick=()=>{const c=combos.find(c=>c.f===st.face);c&&load(c)};
+  document.querySelectorAll('#plates .room').forEach(el=>{const h=()=>{st.sel=el.dataset.key;renderHeat()};el.onclick=h;el.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();h()}}});
+  // detail
+  const box=document.getElementById('detail');
+  let found=null;if(st.sel){const [fi,id]=st.sel.split(':');const r=ev.fl[+fi]&&ev.fl[+fi].rooms.find(x=>String(x.id)===id);if(r)found={r,fi:+fi}}
+  if(!found) box.innerHTML='<b>Click any room</b> to see its zone, score and the rule behind it.';
+  else{const z=ev.Z[st.sel];const rule=R[found.r.t]?R[found.r.t][z]:null;
+    let t='<b>'+esc(found.r.n)+'</b> · '+esc(em.floors[found.fi].name.toLowerCase())+' · zone <b>'+DIRNAME[z]+'</b>';
+    if(rule) t+=' · score '+sStr(rule[0])+'<br>'+rule[1];
+    else if(found.r.t==='porch') t+='<br>'+(ev.why.entrance||'Mark the front door in the editor to score the entrance.');
+    else t+='<br>Halls, closets, laundry and similar rooms are not scored by placement.'+(z==='C'?' This area falls in the Brahmasthan; keep it open.':'');
+    box.innerHTML=t}
+  // matrix
+  const rows=[['Front door',null,null]];ev.fl.forEach((v,i)=>v.rooms.filter(r=>R[r.t]).forEach(r=>rows.push([r.n,r,i])));
+  let h='<thead><tr><th>'+esc(em.name)+' · garage '+(st.flip?'L':'R')+'</th>'+DIRS.map(d=>'<th>'+d+'</th>').join('')+'</tr></thead><tbody>';
+  rows.forEach(([n,r])=>{if(!r&&ev.fl[0].door==null)return;h+='<tr><td>'+esc(n)+'</td>';DIRS.forEach((d,i)=>{const F=i*45+st.skew;let z,sc;
+    if(!r){sc=entrance(em,F,st.flip,ev.fl[0].door).score}else{z=zoneFn(em,st.flip,F)(r);sc=R[r.t][z][0]}
+    h+='<td style="background:'+heatFill(sc)+'">'+(r?z+' ':'')+sStr(sc)+'</td>'});h+='</tr>'});
+  if(!ev.empty) h+='<tr><td><b>Overall</b></td>'+DIRS.map((d,i)=>'<td><b>'+evaluate(em,sel,i*45+st.skew,st.flip).total+'</b></td>').join('')+'</tr>';
+  document.getElementById('matrix').innerHTML=h+'</tbody>';
+}
+
+/* ---------- model bar ---------- */
+function renderBar(){
+  const s=document.getElementById('mSel');
+  s.innerHTML='<option value="windsor">The Windsor (built-in example)</option>'+MODELS.map(m=>'<option value="'+m.id+'">'+esc(m.name)+'</option>').join('');
+  s.value=st.model;
+  const custom=st.model!=='windsor';
+  document.getElementById('mRename').hidden=!custom;
+  document.getElementById('mRenameInput').value=custom?curModel().name:'';
+  document.getElementById('mEdit').hidden=!custom;
+  document.getElementById('mEdit').textContent=st.editing?'Close editor':'Edit plan';
+  document.getElementById('mDup').hidden=!custom;
+  document.getElementById('mDel').hidden=!custom;
+  document.getElementById('mDel').textContent=st.delArm===st.model?'Click again to delete':'Delete';
+  document.getElementById('editor').hidden=!(custom&&st.editing);
+  document.getElementById('copyPlan').hidden=!custom;document.getElementById('dlPlan').hidden=!custom;
+}
+function newModel(){const m={id:'m'+Date.now(),name:'New house '+(MODELS.length+1),W:40,D:null,floors:[{name:'Ground floor',rooms:[],fp:null,door:null},{name:'Second floor',rooms:[],fp:null,door:null}]};
+  MODELS.push(m);saveModels();st.model=m.id;st.editing=true;st.ef=0;st.emode='fp';st.full=null;st.sel=null;renderAll()}
+
+/* ---------- editor ---------- */
+const FULL={};
+function ed(){return curModel()}
+function efloor(){return ed().floors[st.ef]}
+function stageInfo(){const f=efloor();
+  if(st.full) return {src:st.full.src,iw:st.full.w,ih:st.full.h,full:true};
+  if(f.img) return {src:f.img,iw:f.iw,ih:f.ih,full:false};
+  return null}
+function renderEditor(){
+  if(st.model==='windsor'||!st.editing) return;
+  const m=ed(), f=efloor();
+  document.getElementById('fTabs').innerHTML=m.floors.map((fl,i)=>'<button data-i="'+i+'" aria-pressed="'+(i===st.ef)+'">'+esc(fl.name)+'</button>').join('')+'<button id="fAdd">+ Add floor</button>';
+  document.querySelectorAll('#fTabs button[data-i]').forEach(b=>b.onclick=()=>{st.ef=+b.dataset.i;st.full=null;st.emode=efloor().fp?'room':'fp';renderEditor()});
+  document.getElementById('fAdd').onclick=()=>{m.floors.push({name:'Floor '+(m.floors.length+1),rooms:[],fp:null,door:null});st.ef=m.floors.length-1;st.full=null;st.emode='fp';saveModels();renderAll()};
+  document.getElementById('fName').value=f.name;
+  document.getElementById('fRemove').hidden=m.floors.length<2;
+  document.getElementById('useLast').hidden=!(FULL.last&&!f.img&&!st.full);
+  const si=stageInfo();
+  document.getElementById('drop').hidden=!!si;
+  document.getElementById('stageWrap').hidden=!si;
+  document.getElementById('rotBox').hidden=!(si&&si.full);
+  // modes
+  const modes=[['fp','1 · Outline the house'],['room','2 · Draw rooms']];if(st.ef===0)modes.push(['door','3 · Mark front door']);
+  document.getElementById('mModes').innerHTML=modes.map(([k,n])=>'<button data-k="'+k+'" aria-pressed="'+(st.emode===k)+'"'+((k!=='fp'&&!f.fp&&!st.full)||(k!=='fp'&&st.full)?' disabled':'')+'>'+n+'</button>').join('');
+  document.querySelectorAll('#mModes button').forEach(b=>b.onclick=()=>{st.emode=b.dataset.k;renderEditor()});
+  const hints={fp:st.full?'Drag a box around the outside walls of this floor, from the rear wall to the front wall. The street must be at the bottom; rotate first if it isn\'t. The plan is then cropped to that box.':'Drag a new box around the outside walls to redo the outline. Rooms you have drawn stay where they are.',
+    room:'Pick a room type, then drag a box over that room on the plan. Repeat for each room. Rename or retype rooms in the list.',
+    door:'Click the plan where the front door is. Only its position along the front wall matters.'};
+  document.getElementById('eHint').textContent=si?hints[st.emode]:'Upload an image or PDF of this floor\'s plan. Use a plan where the street is at the bottom, or rotate it after uploading.';
+  document.getElementById('roomTools').hidden=st.emode!=='room';
+  document.getElementById('eType').value=st.etype;
+  // dims
+  const em=toEngine(m);
+  document.getElementById('dimW').value=m.W||40;document.getElementById('dimD').value=m.D||'';document.getElementById('dimD').placeholder=em.D;
+  // room list
+  document.getElementById('roomList').innerHTML=f.rooms.length?f.rooms.map(r=>'<div class="roomrow" data-id="'+r.id+'"><input aria-label="Room name" value="'+esc(r.n)+'" data-f="n"><select aria-label="Room type" data-f="t">'+TYPES.map(([k,n])=>'<option value="'+k+'"'+(k===r.t?' selected':'')+'>'+n+'</option>').join('')+'</select><button aria-label="Remove '+esc(r.n)+'" data-f="x">×</button></div>').join(''):'<p class="hint">No rooms on this floor yet.</p>';
+  document.querySelectorAll('#roomList .roomrow').forEach(row=>{const r=f.rooms.find(x=>String(x.id)===row.dataset.id);
+    row.querySelector('[data-f=n]').onchange=e=>{r.n=e.target.value||'Room';saveModels();renderHeat();drawStage()};
+    row.querySelector('[data-f=t]').onchange=e=>{r.t=e.target.value;saveModels();renderHeat();drawStage()};
+    row.querySelector('[data-f=x]').onclick=()=>{f.rooms=f.rooms.filter(x=>x!==r);saveModels();renderAll()}});
+  document.getElementById('roomCount').textContent=f.rooms.length+' room'+(f.rooms.length===1?'':'s');
+  if(si){const img=document.getElementById('stageImg');if(img.getAttribute('src')!==si.src)img.src=si.src}
+  drawStage();
+}
+function drawStage(){
+  const si=stageInfo(); if(!si) return;
+  const svg=document.getElementById('stageSvg'), f=efloor();
+  svg.setAttribute('viewBox','0 0 '+si.iw+' '+si.ih);
+  const u=Math.max(si.iw,si.ih)/400;
+  let s='';
+  if(!si.full){
+    f.rooms.forEach(r=>{const col=R[r.t]?'var(--saffron)':'var(--ink-2)';
+      s+='<rect x="'+r.x+'" y="'+r.y+'" width="'+r.w+'" height="'+r.h+'" fill="hsl(28 80% 55% / .16)" stroke="'+col+'" stroke-width="'+(1.5*u)+'"/>';
+      s+='<text x="'+(r.x+r.w/2)+'" y="'+(r.y+r.h/2)+'" text-anchor="middle" dominant-baseline="central" font-size="'+(11*u)+'" font-weight="600" style="paint-order:stroke;stroke:var(--sheet);stroke-width:'+(3*u)+'px">'+esc(r.n)+'</text>'});
+    if(f.fp) s+='<rect x="'+f.fp.x+'" y="'+f.fp.y+'" width="'+f.fp.w+'" height="'+f.fp.h+'" fill="none" stroke="var(--ink)" stroke-width="'+(2.5*u)+'" stroke-dasharray="'+(8*u)+' '+(5*u)+'"/>';
+    if(f.fp) s+='<text x="'+(f.fp.x+f.fp.w/2)+'" y="'+(f.fp.y+f.fp.h+14*u)+'" text-anchor="middle" font-size="'+(11*u)+'" fill="var(--ink-2)" style="paint-order:stroke;stroke:var(--sheet);stroke-width:'+(3*u)+'px">Street side</text>';
+    if(st.ef===0&&f.door!=null&&f.fp) s+='<rect x="'+(f.door-6*u)+'" y="'+(f.fp.y+f.fp.h-4*u)+'" width="'+(12*u)+'" height="'+(8*u)+'" rx="'+(2*u)+'" fill="var(--saffron)"/>';
+  }
+  if(st.drag){const d=st.drag;const x=Math.min(d.x0,d.x1),y=Math.min(d.y0,d.y1),w=Math.abs(d.x1-d.x0),h=Math.abs(d.y1-d.y0);
+    s+='<rect x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" fill="hsl(28 80% 55% / .12)" stroke="var(--saffron)" stroke-width="'+(2*u)+'" stroke-dasharray="'+(6*u)+' '+(4*u)+'"/>'}
+  svg.innerHTML=s;
+}
+function svgPt(e){const svg=document.getElementById('stageSvg'), si=stageInfo();const b=svg.getBoundingClientRect();
+  return {x:Math.max(0,Math.min(si.iw,(e.clientX-b.left)/b.width*si.iw)),y:Math.max(0,Math.min(si.ih,(e.clientY-b.top)/b.height*si.ih))}}
+function initStage(){
+  const svg=document.getElementById('stageSvg');
+  svg.addEventListener('pointerdown',e=>{if(!stageInfo())return;const p=svgPt(e);
+    if(st.emode==='door'){const f=efloor();if(!f.fp)return;f.door=Math.max(f.fp.x,Math.min(f.fp.x+f.fp.w,p.x));saveModels();renderHeat();drawStage();return}
+    st.drag={x0:p.x,y0:p.y,x1:p.x,y1:p.y};svg.setPointerCapture(e.pointerId);e.preventDefault()});
+  svg.addEventListener('pointermove',e=>{if(!st.drag)return;const p=svgPt(e);st.drag.x1=p.x;st.drag.y1=p.y;drawStage()});
+  const end=async e=>{if(!st.drag)return;const d=st.drag;st.drag=null;const si=stageInfo();
+    const x=Math.min(d.x0,d.x1),y=Math.min(d.y0,d.y1),w=Math.abs(d.x1-d.x0),h=Math.abs(d.y1-d.y0);
+    if(w<si.iw/80||h<si.ih/80){drawStage();return}
+    const f=efloor();
+    if(st.emode==='fp'){
+      if(si.full){const c=await cropTo(st.full,{x,y,w,h});f.img=c.src;f.iw=c.iw;f.ih=c.ih;f.fp=c.fp;f.rooms=[];f.door=null;st.full=null;st.emode='room'}
+      else{f.fp={x,y,w,h};st.emode='room'}
+      saveModels();renderAll();return}
+    if(st.emode==='room'){const n=f.rooms.filter(r=>r.t===st.etype).length;
+      const nm=(document.getElementById('eName').value.trim())||(TYPENAME[st.etype].split(' / ')[0].replace('Hall, closet, laundry','Hall')+(n?' '+(n+1):''));
+      f.rooms.push({id:'r'+Date.now().toString(36)+Math.floor(Math.random()*99),n:nm,t:st.etype,x,y,w,h});document.getElementById('eName').value='';saveModels();renderAll();return}
+    drawStage()};
+  svg.addEventListener('pointerup',end);svg.addEventListener('pointercancel',()=>{st.drag=null;drawStage()});
+}
+
+/* ---------- image intake ---------- */
+function loadImg(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src})}
+async function toCanvasSrc(img,maxW,rot){const r=((rot||0)%360+360)%360;const sw=img.naturalWidth||img.width, sh=img.naturalHeight||img.height;
+  const k=Math.min(1,maxW/Math.max(sw,sh));const w=Math.round(sw*k),h=Math.round(sh*k);
+  const c=document.createElement('canvas');const sideways=r===90||r===270;c.width=sideways?h:w;c.height=sideways?w:h;const x=c.getContext('2d');
+  x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.translate(c.width/2,c.height/2);x.rotate(rad(r));x.drawImage(img,-w/2,-h/2,w,h);
+  return {src:c.toDataURL('image/jpeg',.88),w:c.width,h:c.height}}
+async function cropTo(full,b){const img=await loadImg(full.src);const m=Math.max(b.w,b.h)*.07;
+  const x0=Math.max(0,b.x-m),y0=Math.max(0,b.y-m),x1=Math.min(full.w,b.x+b.w+m),y1=Math.min(full.h,b.y+b.h+m);
+  const cw=x1-x0,ch=y1-y0,k=Math.min(1,1100/Math.max(cw,ch));
+  const c=document.createElement('canvas');c.width=Math.round(cw*k);c.height=Math.round(ch*k);const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);
+  x.drawImage(img,x0,y0,cw,ch,0,0,c.width,c.height);
+  return {src:c.toDataURL('image/jpeg',.82),iw:c.width,ih:c.height,fp:{x:(b.x-x0)*k,y:(b.y-y0)*k,w:b.w*k,h:b.h*k}}}
+let pdfLib=null;
+function loadScript(u){return new Promise((res,rej)=>{const s=document.createElement('script');s.src=u;s.onload=res;s.onerror=rej;document.head.appendChild(s)})}
+async function getPdf(){if(pdfLib)return pdfLib;const base='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+  await loadScript(base+'pdf.worker.min.js');await loadScript(base+'pdf.min.js');pdfLib=window.pdfjsLib;pdfLib.GlobalWorkerOptions.workerSrc=base+'pdf.worker.min.js';return pdfLib}
+let pdfDoc=null;
+async function renderPdfPage(n){const page=await pdfDoc.getPage(n);const v0=page.getViewport({scale:1});const sc=2200/Math.max(v0.width,v0.height);const vp=page.getViewport({scale:sc});
+  const c=document.createElement('canvas');c.width=vp.width;c.height=vp.height;const ctx=c.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+  await page.render({canvasContext:ctx,viewport:vp}).promise;return {src:c.toDataURL('image/jpeg',.88),w:c.width,h:c.height}}
+async function intake(file){
+  const msg=document.getElementById('upMsg');msg.textContent='Reading '+file.name+'…';
+  try{
+    if(file.type==='application/pdf'||/\.pdf$/i.test(file.name)){
+      const lib=await getPdf();const buf=await file.arrayBuffer();pdfDoc=await lib.getDocument({data:buf}).promise;
+      const pg=document.getElementById('pdfPages');pg.innerHTML='';
+      if(pdfDoc.numPages>1){pg.innerHTML='<span class="lbl" style="margin:0">PDF page</span>';for(let i=1;i<=pdfDoc.numPages;i++){const b=document.createElement('button');b.textContent=i;b.onclick=async()=>{setFull(await renderPdfPage(i));pg.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b))};pg.appendChild(b)}}
+      const first=await renderPdfPage(pdfDoc.numPages>1?Math.min(2,pdfDoc.numPages):1);
+      if(pdfDoc.numPages>1) pg.querySelectorAll('button')[Math.min(2,pdfDoc.numPages)-1].setAttribute('aria-pressed','true');
+      setFull(first);
+    }else{
+      const src=await new Promise((res,rej)=>{const fr=new FileReader();fr.onload=()=>res(fr.result);fr.onerror=rej;fr.readAsDataURL(file)});
+      const img=await loadImg(src);document.getElementById('pdfPages').innerHTML='';setFull(await toCanvasSrc(img,2200,0));
+    }
+    msg.textContent='';
+  }catch(err){msg.textContent='Couldn\'t read that file here. Take a screenshot of the floor plan and upload the image instead.'}
+}
+function setFull(full){FULL.last=full;st.full={...full,rot:0,orig:full};st.emode='fp';renderEditor()}
+async function rotateFull(d){if(!st.full)return;const o=st.full.orig;const rot=((st.full.rot||0)+d+360)%360;const img=await loadImg(o.src);const r=await toCanvasSrc(img,2200,rot);st.full={...r,rot,orig:o};FULL.last=st.full;renderEditor()}
+
+/* ---------- export / import ---------- */
+function exportText(){const m=curModel();return JSON.stringify({vastuPlan:1,model:m})}
+function importText(t){const msg=document.getElementById('impMsg');
+  try{const o=JSON.parse(t);const m=o.model||o;if(!m||!Array.isArray(m.floors))throw 0;
+    m.id='m'+Date.now();m.name=(m.name||'Imported plan');MODELS.push(m);saveModels();st.model=m.id;st.editing=false;msg.textContent='Imported "'+m.name+'".';renderAll()}
+  catch(e){msg.textContent='That text isn\'t a plan exported from this tool. Copy it again with "Copy plan as text" and paste the whole thing.'}}
+
+/* ---------- wiring ---------- */
+function renderAll(){renderBar();renderHeat();renderEditor()}
+function init(){
+  loadModels();
+  try{const s=JSON.parse(localStorage.getItem(KEY+'.ui')||'{}');if(s.model&&(s.model==='windsor'||MODELS.some(m=>m.id===s.model)))st.model=s.model}catch(e){}
+  st.showImg=true;
+  const fs=document.getElementById('faceSeg');
+  DIRS.forEach((d,i)=>{const b=document.createElement('button');b.textContent=d;b.dataset.f=i*45;b.title=DIRNAME[d];b.onclick=()=>{st.face=i*45;renderHeat()};fs.appendChild(b)});
+  document.getElementById('garR').onclick=()=>{st.flip=false;renderHeat()};
+  document.getElementById('garL').onclick=()=>{st.flip=true;renderHeat()};
+  document.getElementById('skew').oninput=e=>{st.skew=+e.target.value;renderHeat()};
+  document.getElementById('showImg').onchange=e=>{st.showImg=e.target.checked;renderHeat()};
+  document.getElementById('mSel').onchange=e=>{st.model=e.target.value;st.editing=false;st.full=null;st.sel=null;st.ef=0;st.delArm=null;try{localStorage.setItem(KEY+'.ui',JSON.stringify({model:st.model}))}catch(_){}renderAll()};
+  document.getElementById('mNew').onclick=newModel;
+  document.getElementById('mEdit').onclick=()=>{st.editing=!st.editing;st.full=null;st.ef=0;st.emode=curModel().floors[0].fp?'room':'fp';renderAll()};
+  document.getElementById('mRenameInput').onchange=e=>{curModel().name=e.target.value||'Untitled house';saveModels();renderAll()};
+  document.getElementById('mDup').onclick=()=>{const m=JSON.parse(JSON.stringify(curModel()));m.id='m'+Date.now();m.name+=' (copy)';MODELS.push(m);saveModels();st.model=m.id;renderAll()};
+  document.getElementById('mDel').onclick=()=>{if(st.delArm!==st.model){st.delArm=st.model;renderBar();return}MODELS=MODELS.filter(m=>m.id!==st.model);saveModels();st.model='windsor';st.editing=false;st.delArm=null;renderAll()};
+  document.getElementById('upl').onchange=e=>{const f=e.target.files[0];if(f)intake(f);e.target.value=''};
+  const drop=document.getElementById('drop');
+  drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('over')});drop.addEventListener('dragleave',()=>drop.classList.remove('over'));
+  drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('over');const f=e.dataTransfer.files[0];if(f)intake(f)});
+  document.getElementById('replace').onclick=()=>document.getElementById('upl').click();
+  document.getElementById('useLast').onclick=()=>{if(FULL.last){st.full={...FULL.last,rot:FULL.last.rot||0,orig:FULL.last.orig||FULL.last};st.emode='fp';renderEditor()}};
+  document.getElementById('rotL').onclick=()=>rotateFull(-90);document.getElementById('rotR').onclick=()=>rotateFull(90);
+  document.getElementById('eType').innerHTML=TYPES.map(([k,n])=>'<option value="'+k+'">'+n+'</option>').join('');
+  document.getElementById('eType').onchange=e=>{st.etype=e.target.value};
+  document.getElementById('fName').onchange=e=>{efloor().name=e.target.value||'Floor';saveModels();renderAll()};
+  document.getElementById('fRemove').onclick=()=>{const m=ed();m.floors.splice(st.ef,1);st.ef=0;st.full=null;saveModels();renderAll()};
+  document.getElementById('clearRooms').onclick=()=>{efloor().rooms=[];saveModels();renderAll()};
+  document.getElementById('dimW').onchange=e=>{ed().W=+e.target.value||40;saveModels();renderAll()};
+  document.getElementById('dimD').onchange=e=>{ed().D=+e.target.value||null;saveModels();renderAll()};
+  document.getElementById('copyPlan').onclick=()=>{const t=exportText();const ta=document.getElementById('impText');const msg=document.getElementById('impMsg');
+    const fb=()=>{ta.value=t;ta.focus();ta.select();msg.textContent='Copy blocked here. The plan text is selected in the box below; copy it with your keyboard.'};
+    try{navigator.clipboard.writeText(t).then(()=>{msg.textContent='Plan copied. Paste it into "Import a plan" on any device to load it.'},fb)}catch(e){fb()}};
+  document.getElementById('dlPlan').onclick=()=>{const b=new Blob([exportText()],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=(curModel().name||'plan').replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.vastu.json';document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)};
+  document.getElementById('impBtn').onclick=()=>importText(document.getElementById('impText').value);
+  document.getElementById('impFile').onchange=e=>{const f=e.target.files[0];if(!f)return;const fr=new FileReader();fr.onload=()=>importText(fr.result);fr.readAsText(f);e.target.value=''};
+  [['sw-2',2],['sw-1',1],['sw0',0],['sw-m1',-1],['sw-m2',-2]].forEach(([id,s])=>document.getElementById(id).style.background=heatFill(s));
+  initStage();
+  renderAll();
+}
+init();
+
+</script>
+</body>
+</html>
